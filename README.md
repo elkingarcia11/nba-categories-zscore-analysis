@@ -20,6 +20,17 @@ python zscore_analysis.py
 
 Running the script reads `input.csv`, prints the top 30 players in the console, and writes the full ranked table to `zscore_rankings.csv`.
 
+### Sample Output
+
+```
+Rank  Player                         Total_ZScore  FG%_zscore  FT%_zscore  3:00 PM_zscore  REB_zscore  AST_zscore  STL_zscore  BLK_zscore  TO_zscore_inverted  PTS_zscore
+1     Josh Giddey ChiSG, PG, SF              12.04        0.50        0.50             1.05        3.64        4.86        1.02       -0.79               -2.28        3.54
+2     Will Richard GSSG, PF                  10.91        1.30        0.23             3.71        1.44        0.46        0.50       -0.79                0.15        3.91
+3     Shai Gilgeous-Alexander OKCPG          10.31        0.23        0.86             1.45        0.56        3.04       -0.71        1.35               -0.70        4.23
+4     Moses Moody GSSG, SF                    9.22        0.78        0.74             2.73       -0.18        0.29        0.50        2.85               -0.21        1.73
+5     Ayo DosunmuDTD ChiSG                    8.65        2.15        0.56            -0.23        0.12        3.76        0.50       -0.79                0.15        2.42
+```
+
 ### Input Format
 
 The script expects a CSV with the following headers (case-sensitive) and numeric values for each category:
