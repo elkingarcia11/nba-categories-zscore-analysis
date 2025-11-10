@@ -11,7 +11,6 @@ This project calculates category z-scores for NBA players and produces overall f
 ### Quick Start
 
 ```bash
-cd /Users/elkingarcia/Documents/python/fantasy
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
