@@ -4,6 +4,8 @@ Fantasy Basketball Z-Score Analysis
 Calculates z-scores for each statistical category and ranks players by total z-score.
 """
 
+from pathlib import Path
+
 import pandas as pd
 def parse_csv_data(file_path: str) -> pd.DataFrame:
     """Parse the CSV file and clean the data."""
@@ -102,9 +104,13 @@ def display_results(df_ranked: pd.DataFrame, top_n: int = 20) -> None:
 def main():
     """Main function to run the z-score analysis."""
     try:
+        base_dir = Path(__file__).resolve().parent
+        input_file = base_dir / 'input.csv'
+        output_file = base_dir / 'zscore_rankings.csv'
+
         # Parse the CSV data
         print("Loading and parsing data...")
-        df = parse_csv_data('/Users/elkingarcia/Documents/python/fantasy/input.csv')
+        df = parse_csv_data(str(input_file))
         print(f"Loaded {len(df)} players")
         
         # Calculate z-scores
@@ -123,7 +129,6 @@ def main():
         display_results(df_ranked, top_n=30)
         
         # Save results to CSV
-        output_file = '/Users/elkingarcia/Documents/python/fantasy/zscore_rankings.csv'
         df_ranked.to_csv(output_file, index=False)
         print(f"\nResults saved to: {output_file}")
         
