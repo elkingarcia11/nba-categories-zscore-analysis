@@ -17,7 +17,7 @@ pip install -r requirements.txt
 python zscore_analysis.py
 ```
 
-Running the script reads `input.csv`, prints the top 30 players in the console, and writes the full ranked table to `zscore_rankings.csv`.
+Running the script reads `input.csv`, prints the top 30 players in the console, writes the full ranked table to `zscore_rankings.csv`, and if `my_players.csv` exists, extracts your team's players and saves their rankings to `my_player_ranking.csv`.
 
 ### Sample Output
 
@@ -58,16 +58,36 @@ Player B,0.476,0.902,3.1,4.5,6.1,1.0,0.4,3.5,21.2
 ### Updating the Data
 
 1. Replace or edit `input.csv` with the latest season or split (e.g., last 7 days).
-2. Re-run `zscore_analysis.py`.
-3. Find the generated CSV in the project root (e.g., `zscore_rankings.csv`).
+2. (Optional) Update `my_players.csv` with your current roster from ESPN's "My Team" tab.
+3. Re-run `zscore_analysis.py`.
+4. Find the generated CSV files in the project root:
+   - `zscore_rankings.csv` – full player rankings
+   - `my_player_ranking.csv` – your team's player rankings (if `my_players.csv` exists)
+
+### My Team Analysis
+
+The script can extract and analyze players from your fantasy team roster. To use this feature:
+
+1. **Populate `my_players.csv`**:
+   - Go to ESPN Fantasy Basketball
+   - Navigate to the "My Team" tab
+   - Copy your team roster (including starters, bench, and IR slots)
+   - Paste the data into a CSV file and save it as `my_players.csv` in the project directory
+   - The script expects the CSV to have a "Player" column (column index 1) with player names
+
+2. **Run the script**: The script will automatically detect `my_players.csv` and:
+   - Extract player names from your roster
+   - Match them against the full rankings in `zscore_rankings.csv`
+   - Generate `my_player_ranking.csv` with your team's players sorted by rank
+
+The `my_player_ranking.csv` file contains the same columns as `zscore_rankings.csv`, but only includes players from your roster, making it easy to see how your team stacks up against the full player pool.
 
 ### Output Files
 
-- `zscore_rankings.csv` – default full-season rankings.
-- `zscore_rankings_last_7.csv` – example recent-period rankings.
-- `zscore_rankings_2025.csv` – example historical snapshot.
+- `zscore_rankings.csv` – full rankings of all players with z-scores and rankings
+- `my_player_ranking.csv` – rankings for players in your roster (generated if `my_players.csv` exists)
 
-Each file includes the total z-score plus category-by-category z-scores for field goal percentage, free throw percentage, three-pointers made, rebounds, assists, steals, blocks, turnovers, and points.
+Each file includes the total z-score plus category-by-category z-scores for field goal percentage, free throw percentage, three-pointers made, rebounds, assists, steals, blocks, turnovers (inverted, since lower is better), and points.
 
 ### Notes
 

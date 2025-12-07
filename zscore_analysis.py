@@ -101,6 +101,78 @@ def display_results(df_ranked: pd.DataFrame, top_n: int = 20) -> None:
         
         print(f"{row['Rank']:<4} {player_name:<25} {total_z:<12.2f} {fg_z:<8.2f} {ft_z:<8.2f} {pm3_z:<8.2f} {reb_z:<8.2f} {ast_z:<8.2f} {stl_z:<8.2f} {blk_z:<8.2f} {to_z:<8.2f} {pts_z:<8.2f}")
 
+def extract_my_players_rankings(my_players_file: str, rankings_file: str, output_file: str) -> None:
+    """Extract player names from my_players.csv and find their rankings."""
+    try:
+        # Read my_players.csv
+        my_players_df = pd.read_csv(my_players_file)
+        
+        # Extract player names from the Player column (column index 1)
+        # Filter out header rows, stats rows, and empty players
+        valid_slots = {'PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL', 'Bench', 'IR'}
+        player_names = []
+        
+        for idx, row in my_players_df.iterrows():
+            # Get the first column (SLOT) and second column (Player)
+            slot = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ''
+            player = row.iloc[1] if len(row) > 1 else None
+            
+            # Skip rows that are headers, stats, or don't have valid slots
+            if slot.upper() in {'STATS', 'MIN', 'STARTERS', 'SLOT'} or slot == '':
+                continue
+            
+            # Only process rows with valid slot values
+            if slot in valid_slots and pd.notna(player):
+                player_name = str(player).replace('\n', ' ').strip()
+                # Skip if player is "Empty" or empty
+                if player_name and player_name.upper() != 'EMPTY':
+                    player_names.append(player_name)
+        
+        print(f"\nFound {len(player_names)} players in my_players.csv")
+        
+        # Read the rankings CSV
+        rankings_df = pd.read_csv(rankings_file)
+        
+        # Normalize player names for matching (remove extra spaces, make comparison easier)
+        def normalize_name(name):
+            return ' '.join(name.split())
+        
+        # Create a mapping of normalized names to original names in rankings
+        rankings_normalized = {normalize_name(name): name for name in rankings_df['Player']}
+        
+        # Find matching players
+        matched_players = []
+        for my_player in player_names:
+            normalized_my_player = normalize_name(my_player)
+            # Try exact match first
+            if normalized_my_player in rankings_normalized:
+                matched_players.append(rankings_normalized[normalized_my_player])
+            else:
+                # Try partial matching (check if my_player name starts with any ranking player name or vice versa)
+                found = False
+                for ranking_name, original_name in rankings_normalized.items():
+                    # Check if either name contains the other (for cases like "Jordan PooleO" vs "Jordan PooleO NOSG, PG")
+                    if normalized_my_player in ranking_name or ranking_name in normalized_my_player:
+                        matched_players.append(original_name)
+                        found = True
+                        break
+                if not found:
+                    print(f"Warning: Could not find ranking for: {my_player}")
+        
+        # Filter rankings to only include matched players
+        my_players_rankings = rankings_df[rankings_df['Player'].isin(matched_players)].copy()
+        
+        # Sort by rank
+        my_players_rankings = my_players_rankings.sort_values('Rank').reset_index(drop=True)
+        
+        # Save to CSV
+        my_players_rankings.to_csv(output_file, index=False)
+        print(f"Saved {len(my_players_rankings)} player rankings to: {output_file}")
+        
+    except Exception as e:
+        print(f"Error extracting my players rankings: {e}")
+        raise
+
 def main():
     """Main function to run the z-score analysis."""
     try:
@@ -140,6 +212,17 @@ def main():
         print(f"Highest total z-score: {df_ranked['Total_ZScore'].max():.2f}")
         print(f"Lowest total z-score: {df_ranked['Total_ZScore'].min():.2f}")
         print(f"Average total z-score: {df_ranked['Total_ZScore'].mean():.2f}")
+        
+        # Extract my players rankings
+        my_players_file = base_dir / 'my_players.csv'
+        my_players_output = base_dir / 'my_player_ranking.csv'
+        if my_players_file.exists():
+            print("\n" + "=" * 50)
+            print("EXTRACTING MY PLAYERS RANKINGS")
+            print("=" * 50)
+            extract_my_players_rankings(str(my_players_file), str(output_file), str(my_players_output))
+        else:
+            print(f"\nWarning: {my_players_file} not found. Skipping my players extraction.")
         
     except Exception as e:
         print(f"Error: {e}")
