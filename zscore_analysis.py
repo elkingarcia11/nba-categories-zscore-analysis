@@ -10,13 +10,28 @@ import pandas as pd
 def parse_csv_data(file_path: str) -> pd.DataFrame:
     """Parse the CSV file and clean the data."""
     # Read the CSV file
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path, encoding='utf-8-sig')
+
+    # Normalize player column naming (handle sources that use PLAYERS, Player, etc.)
+    player_column = next(
+        (col for col in df.columns if col.strip().lower() in {"player", "players"}),
+        None,
+    )
+    if player_column is None:
+        raise KeyError("Could not locate a Player column in the input CSV.")
+    if player_column != "Player":
+        df = df.rename(columns={player_column: "Player"})
     
     # Remove the last row which contains "STATS" and empty values
     df = df[:-1]
     
     # Clean player names (remove newlines and extra text)
-    df['Player'] = df['Player'].str.replace('\n', ' ').str.strip()
+    df['Player'] = (
+        df['Player']
+        .str.replace('\r', ' ', regex=False)
+        .str.replace('\n', ' ', regex=False)
+        .str.strip()
+    )
     
     # Convert numeric columns to float, handling any non-numeric values
     numeric_columns = ['FG%', 'FT%', '3:00 PM', 'REB', 'AST', 'STL', 'BLK', 'TO', 'PTS']
@@ -29,16 +44,19 @@ def parse_csv_data(file_path: str) -> pd.DataFrame:
     
     return df
 
-def calculate_z_scores(df: pd.DataFrame) -> pd.DataFrame:
+def calculate_z_scores(df: pd.DataFrame, categories: list = None) -> pd.DataFrame:
     """Calculate z-scores for each statistical category."""
-    # Define the categories to analyze
-    categories = ['FG%', 'FT%', '3:00 PM', 'REB', 'AST', 'STL', 'BLK', 'TO', 'PTS']
+    # Define the categories to analyze (default to all categories)
+    if categories is None:
+        categories = ['FG%', 'FT%', '3:00 PM', 'REB', 'AST', 'STL', 'BLK', 'TO', 'PTS']
     
     # Create a copy of the dataframe
     df_z = df.copy()
     
     # Calculate z-scores for each category
     for category in categories:
+        if category not in df.columns:
+            continue
         mean_val = df[category].mean()
         std_val = df[category].std()
         
@@ -47,16 +65,22 @@ def calculate_z_scores(df: pd.DataFrame) -> pd.DataFrame:
     
     return df_z
 
-def calculate_total_z_scores(df_z: pd.DataFrame) -> pd.DataFrame:
+def calculate_total_z_scores(df_z: pd.DataFrame, categories: list = None) -> pd.DataFrame:
     """Calculate total z-scores for each player."""
     # Define the categories (excluding TO since lower is better)
-    positive_categories = ['FG%', 'FT%', '3:00 PM', 'REB', 'AST', 'STL', 'BLK', 'PTS']
+    if categories is None:
+        positive_categories = ['FG%', 'FT%', '3:00 PM', 'REB', 'AST', 'STL', 'BLK', 'PTS']
+    else:
+        positive_categories = [cat for cat in categories if cat != 'TO']
     
     # For TO (turnovers), we want to invert the z-score since lower is better
-    df_z['TO_zscore_inverted'] = -df_z['TO_zscore']
+    if 'TO' in df_z.columns and 'TO_zscore' in df_z.columns:
+        df_z['TO_zscore_inverted'] = -df_z['TO_zscore']
     
     # Calculate total z-score (sum of all positive z-scores)
-    zscore_columns = [f'{cat}_zscore' for cat in positive_categories if cat != 'TO'] + ['TO_zscore_inverted']
+    zscore_columns = [f'{cat}_zscore' for cat in positive_categories if f'{cat}_zscore' in df_z.columns]
+    if 'TO_zscore_inverted' in df_z.columns:
+        zscore_columns.append('TO_zscore_inverted')
     df_z['Total_ZScore'] = df_z[zscore_columns].sum(axis=1)
     
     return df_z
@@ -71,35 +95,57 @@ def rank_players(df_z: pd.DataFrame) -> pd.DataFrame:
     
     return df_ranked
 
-def display_results(df_ranked: pd.DataFrame, top_n: int = 20) -> None:
+def display_results(df_ranked: pd.DataFrame, top_n: int = 20, categories: list = None) -> None:
     """Display the ranked results."""
     print("=" * 80)
     print("FANTASY BASKETBALL Z-SCORE RANKINGS")
+    if categories:
+        print(f"Categories: {', '.join(categories)}")
     print("=" * 80)
     print(f"Showing top {min(top_n, len(df_ranked))} players")
     print()
     
-    # Display column headers
-    print(f"{'Rank':<4} {'Player':<25} {'Total Z-Score':<12} {'FG%':<8} {'FT%':<8} {'3PM':<8} {'REB':<8} {'AST':<8} {'STL':<8} {'BLK':<8} {'TO':<8} {'PTS':<8}")
-    print("-" * 120)
-    
-    # Display top players
-    for idx, row in df_ranked.head(top_n).iterrows():
-        player_name = row['Player'][:24]  # Truncate long names
-        total_z = row['Total_ZScore']
+    # Determine which columns to display
+    if categories:
+        # Only show the selected categories
+        header_parts = [f"{'Rank':<4}", f"{'Player':<25}", f"{'Total Z-Score':<12}"]
+        for cat in categories:
+            header_parts.append(f"{cat:<8}")
+        print(" ".join(header_parts))
+        print("-" * (4 + 25 + 12 + len(categories) * 8 + len(categories)))
         
-        # Get individual z-scores
-        fg_z = row['FG%_zscore']
-        ft_z = row['FT%_zscore']
-        pm3_z = row['3:00 PM_zscore']
-        reb_z = row['REB_zscore']
-        ast_z = row['AST_zscore']
-        stl_z = row['STL_zscore']
-        blk_z = row['BLK_zscore']
-        to_z = row['TO_zscore_inverted']  # Already inverted
-        pts_z = row['PTS_zscore']
+        for idx, row in df_ranked.head(top_n).iterrows():
+            player_name = row['Player'][:24]  # Truncate long names
+            total_z = row['Total_ZScore']
+            parts = [f"{row['Rank']:<4}", f"{player_name:<25}", f"{total_z:<12.2f}"]
+            for cat in categories:
+                zscore_col = f'{cat}_zscore'
+                if zscore_col in row:
+                    parts.append(f"{row[zscore_col]:<8.2f}")
+                else:
+                    parts.append(f"{'N/A':<8}")
+            print(" ".join(parts))
+    else:
+        # Display all columns (original behavior)
+        print(f"{'Rank':<4} {'Player':<25} {'Total Z-Score':<12} {'FG%':<8} {'FT%':<8} {'3PM':<8} {'REB':<8} {'AST':<8} {'STL':<8} {'BLK':<8} {'TO':<8} {'PTS':<8}")
+        print("-" * 120)
         
-        print(f"{row['Rank']:<4} {player_name:<25} {total_z:<12.2f} {fg_z:<8.2f} {ft_z:<8.2f} {pm3_z:<8.2f} {reb_z:<8.2f} {ast_z:<8.2f} {stl_z:<8.2f} {blk_z:<8.2f} {to_z:<8.2f} {pts_z:<8.2f}")
+        for idx, row in df_ranked.head(top_n).iterrows():
+            player_name = row['Player'][:24]  # Truncate long names
+            total_z = row['Total_ZScore']
+            
+            # Get individual z-scores (with fallback if column doesn't exist)
+            fg_z = row.get('FG%_zscore', 0)
+            ft_z = row.get('FT%_zscore', 0)
+            pm3_z = row.get('3:00 PM_zscore', 0)
+            reb_z = row.get('REB_zscore', 0)
+            ast_z = row.get('AST_zscore', 0)
+            stl_z = row.get('STL_zscore', 0)
+            blk_z = row.get('BLK_zscore', 0)
+            to_z = row.get('TO_zscore_inverted', row.get('TO_zscore', 0))
+            pts_z = row.get('PTS_zscore', 0)
+            
+            print(f"{row['Rank']:<4} {player_name:<25} {total_z:<12.2f} {fg_z:<8.2f} {ft_z:<8.2f} {pm3_z:<8.2f} {reb_z:<8.2f} {ast_z:<8.2f} {stl_z:<8.2f} {blk_z:<8.2f} {to_z:<8.2f} {pts_z:<8.2f}")
 
 def extract_my_players_rankings(my_players_file: str, rankings_file: str, output_file: str) -> None:
     """Extract player names from my_players.csv and find their rankings."""
@@ -173,36 +219,47 @@ def extract_my_players_rankings(my_players_file: str, rankings_file: str, output
         print(f"Error extracting my players rankings: {e}")
         raise
 
-def main():
-    """Main function to run the z-score analysis."""
+def main(categories: list = None):
+    """Main function to run the z-score analysis.
+    
+    Args:
+        categories: List of categories to analyze (e.g., ['AST', 'STL']). 
+                   If None, uses all categories.
+    """
     try:
         base_dir = Path(__file__).resolve().parent
-        input_file = base_dir / 'input.csv'
-        output_file = base_dir / 'zscore_rankings.csv'
+        input_path = base_dir / 'input.csv'
+        
+        # Determine output filename based on categories
+        if categories:
+            output_filename = f"zscore_rankings_{'_'.join(categories).replace(' ', '_').replace('%', 'pct')}.csv"
+        else:
+            output_filename = 'zscore_rankings.csv'
+        output_path = base_dir / output_filename
 
         # Parse the CSV data
         print("Loading and parsing data...")
-        df = parse_csv_data(str(input_file))
+        df = parse_csv_data(str(input_path))
         print(f"Loaded {len(df)} players")
         
         # Calculate z-scores
         print("Calculating z-scores...")
-        df_z = calculate_z_scores(df)
+        df_z = calculate_z_scores(df, categories=categories)
         
         # Calculate total z-scores
         print("Calculating total z-scores...")
-        df_z = calculate_total_z_scores(df_z)
+        df_z = calculate_total_z_scores(df_z, categories=categories)
         
         # Rank players
         print("Ranking players...")
         df_ranked = rank_players(df_z)
         
         # Display results
-        display_results(df_ranked, top_n=30)
+        display_results(df_ranked, top_n=30, categories=categories)
         
         # Save results to CSV
-        df_ranked.to_csv(output_file, index=False)
-        print(f"\nResults saved to: {output_file}")
+        df_ranked.to_csv(output_path, index=False)
+        print(f"\nResults saved to: {output_path}")
         
         # Display summary statistics
         print("\n" + "=" * 50)
@@ -220,15 +277,23 @@ def main():
             print("\n" + "=" * 50)
             print("EXTRACTING MY PLAYERS RANKINGS")
             print("=" * 50)
-            extract_my_players_rankings(str(my_players_file), str(output_file), str(my_players_output))
+            extract_my_players_rankings(str(my_players_file), str(output_path), str(my_players_output))
         else:
             print(f"\nWarning: {my_players_file} not found. Skipping my players extraction.")
         
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
     
     return 0
 
 if __name__ == "__main__":
-    exit(main())
+    import sys
+    # Check if categories are specified via command line
+    if len(sys.argv) > 1:
+        categories = sys.argv[1:]
+        exit(main(categories=categories))
+    else:
+        exit(main())

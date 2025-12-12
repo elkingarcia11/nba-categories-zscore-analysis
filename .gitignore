@@ -2,3 +2,4 @@ venv/
 input.csv
 zscore_rankings.csv
 __pycache__/
+zscore_rankings*.csv
